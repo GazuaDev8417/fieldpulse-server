@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum InspectionStatus {
+  DRAFT
+  PENDING_SYNC
+  SYNCED
+}
+
+model Inspection {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  createdById    String           @db.Uuid
+  title          String           @db.VarChar(200)
+  description    String?
+  status         InspectionStatus @default(DRAFT)
+
+  latitude  Float?
+  longitude Float?
+
+  photoUrl     String?
+  signatureUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, createdAt])
+  @@index([createdById])
+  @@index([status])
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  INSPECTOR
+  VIEWER
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(120)
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships   OrganizationMember[]
+  inspections   Inspection[]
+  refreshTokens RefreshToken[]
+}
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(150)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members     OrganizationMember[]
+  inspections Inspection[]
+}
+
+model OrganizationMember {
+  organizationId String           @db.Uuid
+  userId         String           @db.Uuid
+  role           OrganizationRole @default(INSPECTOR)
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, userId])
+  @@index([userId])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}

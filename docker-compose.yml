@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: fieldpulse-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: gazua_inspections
+      POSTGRES_PASSWORD: AlfaDB*021
+      POSTGRES_DB: fieldpulse
+    volumes:
+      - fieldpulse-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gazua_inspections -d fieldpulse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fieldpulse-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      DATABASE_URL: postgresql://gazua_inspections:${POSTGRES_PASSWORD}@postgres:5432/fieldpulse
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_TTL: 30d
+    volumes:
+      - ./uploads:/app/uploads
+
+volumes:
+  fieldpulse-postgres:
