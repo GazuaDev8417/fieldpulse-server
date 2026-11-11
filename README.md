@@ -5,7 +5,8 @@ REST API and PostgreSQL data layer for the FieldPulse mobile application. It man
 ## Features
 
 - User registration and login
-- Multiple organizations with organization membership roles
+- Registration creates an organization and an owner membership for the new user
+- Organization-scoped authorization for inspections and photos
 - JWT access tokens and rotating refresh tokens
 - Token logout and refresh-token revocation
 - Organization-scoped inspection CRUD operations
@@ -38,7 +39,7 @@ REST API and PostgreSQL data layer for the FieldPulse mobile application. It man
 
 ## Environment
 
-Create `.env` from the example file:
+For running the backend directly on the host, create `.env` from the example:
 
 ```bash
 cp .env.example .env
@@ -60,20 +61,20 @@ Both JWT secrets are required and must be at least 32 characters. Do not commit 
 
 ## Docker Setup
 
-The Compose configuration starts PostgreSQL and the backend together. Protect a Docker environment file:
+The Compose configuration starts both PostgreSQL and the Fastify backend. Create `.env.docker` in the project root and add the following variables:
 
 ```bash
-cp .env.example .env.docker
+touch .env.docker
 chmod 600 .env.docker
 ```
-
-Configure `.env.docker` with real, untracked credentials:
 
 ```dotenv
 POSTGRES_PASSWORD=your-postgresql-password
 JWT_ACCESS_SECRET=replace-with-a-secret-of-at-least-32-characters
 JWT_REFRESH_SECRET=replace-with-a-different-secret-of-at-least-32-characters
 ```
+
+Use the PostgreSQL password configured for the database volume. Compose requires `POSTGRES_PASSWORD`; it does not silently start with an empty password. Keep `.env.docker` private and untracked.
 
 Build and start the services:
 
@@ -85,7 +86,7 @@ Docker runs these services:
 
 - `fieldpulse-postgres`: PostgreSQL 17 with persistent named volume
 - `fieldpulse-backend`: compiled Fastify backend exposed on port `3000`
-- `./uploads:/app/uploads`: persistent photo storage
+- `./uploads:/app/uploads`: host directory mounted for persistent photo storage
 
 Check the services and backend logs:
 
@@ -95,41 +96,18 @@ docker compose logs -f backend
 curl http://localhost:3000/health
 ```
 
-When migrations must be executed from the project host:
+The production Docker image runs the compiled server; it does not contain the Prisma CLI or migration files. Apply migrations from the project host while the PostgreSQL container is running. Install project dependencies first if needed, then export the variables from `.env.docker` and use the host-mapped PostgreSQL port:
 
 ```bash
-source .env.docker
+set -a
+. ./.env.docker
+set +a
+
 DATABASE_URL="postgresql://gazua_inspections:${POSTGRES_PASSWORD}@localhost:5432/fieldpulse" \
   npx prisma migrate deploy
 ```
 
-Docker Compose creates and starts the backend; `npm run dev` is no longer required for the containerized setup.
-
-## PostgreSQL with Docker
-
-Start or inspect PostgreSQL only when needed:
-
-```bash
-docker compose --env-file .env.docker up -d postgres
-docker compose ps
-docker exec -it fieldpulse-postgres psql -U gazua_inspections -d fieldpulse
-```
-
-Keep database credentials in `.env.docker`, not in source control or committed Compose values.
-
-## Install and Database Setup
-
-```bash
-npm install
-npx prisma generate
-npx prisma migrate deploy
-```
-
-For a development database while creating a migration:
-
-```bash
-npx prisma migrate dev
-```
+If the database password contains reserved URL characters (for example `@`, `:`, `/`, or `#`), URL-encode the password in `DATABASE_URL`.
 
 ## Run the Server
 
@@ -138,8 +116,8 @@ Containerized daily usage does not require `npm run dev`:
 ```bash
 docker compose --env-file .env.docker up -d
 docker compose --env-file .env.docker down
-docker compose restart backend
-docker compose logs -f backend
+docker compose --env-file .env.docker restart backend
+docker compose --env-file .env.docker logs -f backend
 ```
 
 Rebuild the backend after Dockerfile or application source changes:
@@ -151,8 +129,18 @@ docker compose --env-file .env.docker up -d --build
 For backend-only host development with file watching:
 
 ```bash
+npm install
+npx prisma generate
 npm run dev
 ```
+
+For this mode, configure `.env` with a reachable PostgreSQL `DATABASE_URL` and the required JWT secrets. If PostgreSQL runs in this project's Docker Compose stack, use `localhost:5432` from the host and apply migrations with:
+
+```bash
+npx prisma migrate deploy
+```
+
+Use `npx prisma migrate dev` only when creating or changing migrations in development.
 
 For a production-style host build:
 
@@ -212,6 +200,8 @@ Authorization: Bearer <access-token>
 ## Organization Security
 
 Every authenticated JWT contains a user ID and organization ID. Inspection queries use the organization ID in the database filter, so a user can read, modify, or delete only records belonging to that user's organization.
+
+The current registration and login flow creates a new organization for each registered account and selects the user's earliest organization membership at login. Organization invitations, membership administration, and switching between multiple organizations are not exposed by the current API.
 
 Inspection photo filenames start with the organization ID. The file route verifies that:
 
@@ -281,6 +271,13 @@ Build TypeScript before deployment:
 ```bash
 npm run build
 ```
+
+## Current Scope and Limitations
+
+- The backend exposes inspection create, read, update, and delete routes; the current mobile app primarily creates, lists, and deletes inspections.
+- Organization isolation is enforced, but the API does not currently provide endpoints for inviting members or administering organization roles.
+- Uploaded photos are stored on local persistent storage mounted at `uploads/inspections`; a multi-instance deployment needs shared object or file storage to serve the same photo from every instance.
+- There is no automated background job that retries mobile operations left pending after offline or network failures.
 
 ## Production Notes
 
