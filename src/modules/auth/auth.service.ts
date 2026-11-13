@@ -28,7 +28,7 @@ function refreshTokenExpiresAt(): Date {
   return new Date(Date.now() + milliseconds)
 }
 
-async function issueTokens(userId: string, organizationId: string) {
+export async function issueTokens(userId: string, organizationId: string) {
   const accessToken = jwt.sign(
     { organizationId },
     env.jwtAccessSecret,
@@ -39,6 +39,7 @@ async function issueTokens(userId: string, organizationId: string) {
   await prisma.refreshToken.create({
     data: {
       userId,
+      organizationId,
       tokenHash: hashToken(refreshToken),
       expiresAt: refreshTokenExpiresAt(),
     },
@@ -158,14 +159,17 @@ export const authService = {
       throw new Error("Invalid or expired refresh token")
     }
 
-    const membership = await prisma.organizationMember.findFirst({
-      where: { userId: storedToken.userId },
-      include: { organization: true },
-      orderBy: { createdAt: "asc" },
+    const membership = await prisma.organizationMember.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: storedToken.organizationId,
+          userId: storedToken.userId
+        }
+      }
     })
 
     if (!membership) {
-      throw new Error("User has no organization")
+      throw new Error("User is not a member of this organization")
     }
 
     await prisma.refreshToken.update({
@@ -175,7 +179,7 @@ export const authService = {
 
     const tokens = await issueTokens(
       storedToken.userId,
-      membership.organizationId,
+      storedToken.organizationId,
     )
 
     return tokens

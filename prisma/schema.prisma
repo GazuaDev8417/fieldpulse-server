@@ -55,6 +55,7 @@ model User {
   memberships   OrganizationMember[]
   inspections   Inspection[]
   refreshTokens RefreshToken[]
+  sentOrganizationInvitations OrganizationInvitation[] @relation("OrganizationInvitationCreator")
 }
 
 model Organization {
@@ -65,6 +66,8 @@ model Organization {
 
   members     OrganizationMember[]
   inspections Inspection[]
+  invitations OrganizationInvitation[]
+  refreshTokens RefreshToken[]
 }
 
 model OrganizationMember {
@@ -81,15 +84,36 @@ model OrganizationMember {
 }
 
 model RefreshToken {
-  id        String    @id @default(uuid()) @db.Uuid
-  userId    String    @db.Uuid
-  tokenHash String    @unique
-  expiresAt DateTime
-  revokedAt DateTime?
-  createdAt DateTime  @default(now())
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @db.Uuid
+  organizationId String       @db.Uuid
+  tokenHash      String    @unique
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([organizationId])
+  @@index([expiresAt])
+}
+
+model OrganizationInvitation {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  createdById    String           @db.Uuid
+  email          String
+  role           OrganizationRole @default(INSPECTOR)
+  tokenHash      String           @unique
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("OrganizationInvitationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, email])
   @@index([expiresAt])
 }

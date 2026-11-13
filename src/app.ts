@@ -3,6 +3,7 @@ import { ZodError } from "zod"
 import "./config/env.js"
 import { inspectionRoutes } from './modules/inspections/inspection.routes.js'
 import { authRoutes } from './modules/auth/auth.routes.js'
+import { invitationRoutes } from './modules/invitations/invitation.routes.js'
 import authenticatePlugin from "./plugins/authenticate.js"
 import multipart from '@fastify/multipart'
 
@@ -29,6 +30,10 @@ export function buildApp(){
 
     app.register(inspectionRoutes, {
         prefix: '/api/v1'
+    })
+
+    app.register(invitationRoutes, {
+        prefix: "/api/v1/organizations"
     })
 
     app.get('/health', async()=>{

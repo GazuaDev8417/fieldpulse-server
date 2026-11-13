@@ -36,6 +36,12 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_ACCESS_TTL: 15m
       JWT_REFRESH_TTL: 30d
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      INVITATION_ACCEPT_URL: ${INVITATION_ACCEPT_URL:-fieldpulse://invitation/accept}
     volumes:
       - ./uploads:/app/uploads
 

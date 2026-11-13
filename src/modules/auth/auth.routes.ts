@@ -1,4 +1,6 @@
 import type { FastifyInstance } from "fastify"
+import { registerFromInvitationSchema } from "../invitations/invitation.schema.js"
+import { InvitationServiceError, invitationService } from "../invitations/invitation.service.js"
 import {
   loginSchema,
   logoutSchema,
@@ -46,6 +48,23 @@ export async function authRoutes(app: FastifyInstance) {
     const input = logoutSchema.parse(request.body)
     await authService.logout(input.refreshToken)
     return reply.status(204).send()
+  })
+
+  app.post('/invitations/register', async(request, reply)=>{
+    const input = registerFromInvitationSchema.parse(request.body)
+
+    try{
+      const result = await invitationService.registerFromInvitation(input)
+      return reply.status(201).send(result)
+    }catch(error){
+      if(error instanceof InvitationServiceError){
+        return reply.status(error.statusCode).send({
+          error: error.message
+        })
+      }
+      
+      throw error
+    }
   })
 
   app.get(

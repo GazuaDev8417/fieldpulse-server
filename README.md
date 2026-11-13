@@ -1,11 +1,13 @@
 # FieldPulse Backend
 
-REST API and PostgreSQL data layer for the FieldPulse mobile application. It manages users, organizations, JWT authentication, inspections, photo uploads, protected photo downloads, and cross-device synchronization.
+REST API and PostgreSQL data layer for the FieldPulse mobile application. It manages users, organizations, JWT authentication, organization invitations, inspections, photo uploads, protected photo downloads, and cross-device synchronization.
 
 ## Features
 
 - User registration and login
 - Registration creates an organization and an owner membership for the new user
+- Owner-created, email-delivered invitations for `ADMIN`, `INSPECTOR`, or `VIEWER` memberships
+- Invitation acceptance for existing accounts and registration for invited new accounts
 - Organization-scoped authorization for inspections and photos
 - JWT access tokens and rotating refresh tokens
 - Token logout and refresh-token revocation
@@ -72,6 +74,12 @@ chmod 600 .env.docker
 POSTGRES_PASSWORD=your-postgresql-password
 JWT_ACCESS_SECRET=replace-with-a-secret-of-at-least-32-characters
 JWT_REFRESH_SECRET=replace-with-a-different-secret-of-at-least-32-characters
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=your-smtp-user
+SMTP_PASSWORD=your-smtp-password
+SMTP_FROM="FieldPulse <no-reply@example.com>"
+INVITATION_ACCEPT_URL=fieldpulse://invitation/accept
 ```
 
 Use the PostgreSQL password configured for the database volume. Compose requires `POSTGRES_PASSWORD`; it does not silently start with an empty password. Keep `.env.docker` private and untracked.
@@ -179,6 +187,18 @@ http://192.168.1.20:3000/api/v1
 | POST | `/api/v1/auth/logout` | No | Revoke a refresh token |
 | GET | `/api/v1/auth/me` | Bearer token | Return the current user profile |
 
+### Organization Invitations
+
+Only a member with the `OWNER` role can create invitations. Invitations expire after seven days, can be accepted once, and store only a hash of the invitation token.
+
+| Method | Route | Authentication | Description |
+|---|---|---|---|
+| POST | `/api/v1/organizations/invitations` | Bearer token; `OWNER` only | Send an invitation with the `ADMIN`, `INSPECTOR`, or `VIEWER` role |
+| POST | `/api/v1/organizations/invitations/accept` | Bearer token | Accept an invitation for the authenticated account; account email must match |
+| POST | `/api/v1/auth/invitations/register` | No | Create an account and membership from an invitation |
+
+SMTP settings and `INVITATION_ACCEPT_URL` must be available to the backend container. The default invitation URL uses the `fieldpulse://` app scheme; it is not a hosted web page and will not display the mobile acceptance screen in a desktop browser.
+
 ### Inspections
 
 | Method | Route | Authentication | Description |
@@ -275,9 +295,12 @@ npm run build
 ## Current Scope and Limitations
 
 - The backend exposes inspection create, read, update, and delete routes; the current mobile app primarily creates, lists, and deletes inspections.
-- Organization isolation is enforced, but the API does not currently provide endpoints for inviting members or administering organization roles.
+- Only an `OWNER` can create invitations. The API does not yet provide member listing, changing member roles, removing members, or transferring ownership.
+- Role-based inspection permissions are not implemented yet: authenticated members currently use the same inspection routes regardless of whether their membership role is `ADMIN`, `INSPECTOR`, or `VIEWER`. In particular, `VIEWER` is not currently read-only.
+- The mobile profile currently offers the same three invitation roles and shows the invitation form only to `OWNER`; the backend independently enforces the owner check.
 - Uploaded photos are stored on local persistent storage mounted at `uploads/inspections`; a multi-instance deployment needs shared object or file storage to serve the same photo from every instance.
 - There is no automated background job that retries mobile operations left pending after offline or network failures.
+- The installed Android APK has reported a clear-text HTTP network-policy failure when calling the local development API. The project configuration enables Android clear-text traffic, but the installed APK's native manifest and API connectivity remain under investigation. Production deployments must use HTTPS.
 
 ## Production Notes
 
@@ -285,6 +308,7 @@ npm run build
 - Store secret keys and database credentials outside source control in `.env.docker` or a secret manager.
 - Keep `.env`, `.env.docker`, uploads, and coverage artifacts untracked by Git.
 - Replace development credentials with unique production credentials.
+- Rotate credentials immediately if they have been exposed outside the protected local environment; `.gitignore` does not revoke or protect secrets that were already shared.
 - Back up PostgreSQL and the `uploads/inspections` directory together.
 - In container or multi-host deployments, persist the photo directory with a named volume or host bind mount.
 - Do not serve uploaded files with public static routes; continue using the authenticated organization-scoped route.
